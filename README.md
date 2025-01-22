@@ -36,6 +36,8 @@
     - `PLEX_SERVER_X_URL`: URL de tu servidor Plex (reemplaza X con el número de servidor).
     - `PLEX_SERVER_X_TOKEN`: Token de tu servidor Plex.
     - `GLANCES_SERVER_X_URL`: URL de Glances en tu servidor Plex.
+    - `TELEGRAM_API_ID`: TU API DE TELEGRAM  (Podeis obtenerlo aqui: https://my.telegram.org/apps)
+    - `TELEGRAM_API_HASH`: TU API HASH DE TELEGRAM
 
     Ejemplo:
 
