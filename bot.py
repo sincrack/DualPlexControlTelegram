@@ -132,7 +132,7 @@ def show_servers(update: Update, context: CallbackContext) -> None:
     keyboard = [[InlineKeyboardButton(f"🏙️ Servidor {server['name']}", callback_data=f"server_{i}")] for i, server in enumerate(PLEX_SERVERS)]
     keyboard.append([InlineKeyboardButton("🔙 Volver al Menú Principal", callback_data="main_menu")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    edit_message_with_image(update, context, "¡Elige tu el servidor a administrar! 👑", reply_markup)
+    edit_message_with_image(update, context, "¡Elige el servidor a administrar! 👑", reply_markup)
 
 def show_server_options(update: Update, context: CallbackContext, server: dict) -> None:
     logger.info(f"Mostrando opciones para el servidor: {server['name']}")
