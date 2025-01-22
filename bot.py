@@ -433,7 +433,7 @@ def show_help(update: Update, context: CallbackContext) -> None:
         "📚 Ver bibliotecas del servidor: Muestra las bibliotecas del servidor.\n"
         "🎬 Streams actuales: Muestra todos los streams activos en tus servidores Plex.\n"
         "🔄 Usuarios transcodificando: Muestra los usuarios que están realizando transcodificación.\n\n"
-        "¡No dudes en contacter conmigo si necesitas ayuda @SinCracK ! 🎉"
+        "¡No dudes en contactar conmigo si necesitas ayuda @SinCracK ! 🎉"
     )
     keyboard = [[InlineKeyboardButton("🏠 Volver al Menú Principal", callback_data="main_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
