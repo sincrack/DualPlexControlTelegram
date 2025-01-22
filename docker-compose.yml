@@ -1,0 +1,48 @@
+services:
+  plexcontroller:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: plexcontroller
+    hostname: plexcontroller    
+    environment:
+      - TELEGRAM_BOT_TOKEN=tu_token_plex_aqui
+      - TELEGRAM_API_URL=http://telegram-bot-api:8089
+      - PLEX_SERVER_1_URL=http://192.168.1.100:32400
+      - PLEX_SERVER_1_TOKEN=tu_token_plex_aqui
+      - PLEX_SERVER_2_URL=http://192.168.1.101:32500
+      - PLEX_SERVER_2_TOKEN=tu_token_plex_aqui
+      - GLANCES_SERVER_1_URL=http://192.168.1.100:61208
+      - GLANCES_SERVER_2_URL=http://192.168.1.101:61208
+    restart: unless-stopped
+    networks:
+      - plexcontroller
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+
+  telegram-bot-api:
+    image: atareao/telegram-bot-api
+    container_name: telegram-bot-api
+    init: true
+    restart: always
+    volumes:
+      - data:/var/lib/telegram-bot-api
+    environment:
+      TELEGRAM_API_ID: TU API DE TELEGRAM
+      TELEGRAM_API_HASH: TU API HASH DE TELEGRAM
+      TELEGRAM_LOCAL: true
+    ports:
+      - "8089:8081"
+    networks:
+      - plexcontroller
+
+networks:
+  plexcontroller:
+    driver: bridge
+
+volumes:
+  data:
+
