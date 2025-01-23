@@ -502,7 +502,8 @@ def show_transcoding_users(update: Update, context: CallbackContext) -> None:
                         server_message += f"🔄 *Transcodificando:* {' y '.join(transcode_type)}\n"
                     else:
                         server_message += "🔄 *Transcodificando:* Desconocido\n"
-                    
+                    server_message += "\n"
+            server_message += "\n" # Added line
 
             
             if server_transcoding_video > 0 or server_transcoding_audio > 0:
@@ -510,14 +511,14 @@ def show_transcoding_users(update: Update, context: CallbackContext) -> None:
                 total_transcoding_video += server_transcoding_video
                 total_transcoding_audio += server_transcoding_audio
             else:
-                message += f"Servidor {server['name']}: No hay usuarios transcodificando.\n\n"
+                message += f"Servidor {server['name']}: No hay usuarios transcodificando.\n\n\n"
         
         except Exception as e:
             logger.error(f"Error al conectar con {server['name']}: {str(e)}")
             message += f"Error al conectar con {server['name']}: {str(e)}\n\n"
     
     if total_transcoding_video == 0 and total_transcoding_audio == 0:
-        message = "😴 *No hay usuarios realizando transcodificación en este momento.*"
+        message = "😴 *No hay usuarios realizando transcodificación en este momento.*\n\n"
     else:
         message = (f"*Transcodificando Video:* {total_transcoding_video} usuarios\n"
                    f"*Transcodificando Audio:* {total_transcoding_audio} usuarios\n\n") + message
@@ -542,4 +543,5 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
