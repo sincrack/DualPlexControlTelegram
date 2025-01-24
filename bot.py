@@ -2,6 +2,7 @@ import logging
 import sys
 import requests
 import re
+from typing import List
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
 from plexapi.server import PlexServer
@@ -86,14 +87,15 @@ def show_main_menu(update: Update, context: CallbackContext) -> None:
         [InlineKeyboardButton("🖥️ Ver servidores", callback_data='view_servers')],
         [InlineKeyboardButton("🎬 Streams actuales", callback_data='current_streams')],
         [InlineKeyboardButton("🔄 Usuarios transcodificando", callback_data='transcoding_users')],
+        [InlineKeyboardButton("🛠️ Modo Mantenimiento", callback_data='maintenance_mode')],
         [InlineKeyboardButton("ℹ️ Obtener Ayuda", callback_data='help')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    welcome_text = ('¡Hola! 🎬✨\n\n'
-                   'Bienvenido a Dual Plex Control, tu centro de mando para gestionar Plex de manera sencilla y eficiente.\n\n'
-                   '¿Preparado para tomar el control total de tu experiencia multimedia? 🚀\n\n'
-                   'Dime, ¿qué te gustaría hacer hoy?')
+    welcome_text = ('¡Bienvenido a Dual Plex Control! 🎬✨\n\n'
+                   'Tu bot de gestión integral para Plex, diseñado para ofrecerte una experiencia óptima, eficiente y sin complicaciones.\n\n'
+                   '¿Listo para optimizar y tomar el control total de tu biblioteca multimedia? 🚀\n\n'
+                   '¿Cómo puedo ayudarte hoy?')
     
     edit_message_with_image(update, context, welcome_text, reply_markup)
 
@@ -131,6 +133,22 @@ def button(update: Update, context: CallbackContext) -> None:
             show_main_menu(update, context)
         elif query.data == 'transcoding_users':
             show_transcoding_users(update, context)
+        elif query.data.startswith('stop_stream_'):
+            parts = query.data.split('_')
+            if len(parts) >= 3:
+                server_index = int(parts[2])
+                session_key = '_'.join(parts[3:])  # Unir el resto en caso de que el session_key contenga guiones bajos
+                stop_user_stream(update, context, server_index, session_key)
+            else:
+                logger.error(f"Formato de callback_data incorrecto: {query.data}")
+        elif query.data == 'maintenance_mode':
+            show_maintenance_options(update, context)
+        elif query.data == 'maintenance_1':
+            perform_maintenance(update, context, [0])
+        elif query.data == 'maintenance_2':
+            perform_maintenance(update, context, [1])
+        elif query.data == 'maintenance_all':
+            perform_maintenance(update, context, [0, 1])
     except Exception as e:
         logger.error(f"Error en el manejo de botones: {str(e)}")
         error_message = f"Lo siento, ha ocurrido un error: {str(e)}"
@@ -145,7 +163,7 @@ def show_servers(update: Update, context: CallbackContext) -> None:
     keyboard = [[InlineKeyboardButton(f"🏙️ {server['name']}", callback_data=f"server_{i}")] for i, server in enumerate(PLEX_SERVERS)]
     keyboard.append([InlineKeyboardButton("🔙 Volver al Menú Principal", callback_data="main_menu")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    edit_message_with_image(update, context, "¡Elige el servidor! 👑", reply_markup)
+    edit_message_with_image(update, context, "¡Elige el servidor sobre el que operar!", reply_markup)
 
 def show_server_options(update: Update, context: CallbackContext, server: dict) -> None:
     logger.info(f"Mostrando opciones para el servidor: {server['name']}")
@@ -448,7 +466,7 @@ def show_help(update: Update, context: CallbackContext) -> None:
     if not is_authorized(update):
         return
     help_text = (
-        "🦸‍♂️ ¡Bienvenido al Centro de Ayuda del Bot! 🦸‍♀️\n\n"
+        "🦸‍♂️ ¡Centro de Ayuda del Bot! 🦸‍♀️\n\n"
         "Aquí tienes una guía rápida de lo que puedo hacer:\n\n"
         "🖥️ *Ver servidores:* Te muestra una lista de tus servidores Plex.\n"
         "🔄 *Actualizar bibliotecas:* Actualiza todas las bibliotecas en un servidor específico.\n"
@@ -456,7 +474,8 @@ def show_help(update: Update, context: CallbackContext) -> None:
         "📊 *Estado del servidor:* Muestra información sobre el estado y la versión del servidor.\n"
         "📚 *Bibliotecas:* Muestra las bibliotecas del servidor.\n"
         "🎬 *Streams actuales:* Muestra todos los streams activos en tus servidores Plex.\n"
-        "🔄 *Usuarios transcodificando:* Muestra los usuarios que están realizando transcodificación.\n\n"
+        "🔄 *Usuarios transcodificando:* Muestra los usuarios que están realizando transcodificación.\n"
+        "🛠️ *Modo Mantenimiento:* Permite realizar tareas de mantenimiento en los servidores.\n\n"
         "¡No dudes en contactar conmigo si tienes dudas @SinCracK ! 🎉"
     )
     keyboard = [[InlineKeyboardButton("🏠 Volver al Menú Principal", callback_data="main_menu")]]
@@ -471,8 +490,9 @@ def show_transcoding_users(update: Update, context: CallbackContext) -> None:
     message = "🔄 *Usuarios realizando transcodificación:*\n\n"
     total_transcoding_video = 0
     total_transcoding_audio = 0
+    keyboard = []
     
-    for server in PLEX_SERVERS:
+    for server_index, server in enumerate(PLEX_SERVERS):
         try:
             plex = PlexServer(server['url'], server['token'])
             sessions = plex.sessions()
@@ -512,6 +532,11 @@ def show_transcoding_users(update: Update, context: CallbackContext) -> None:
                         server_message += f"🔄 *Transcodificando:* {' y '.join(transcode_type)}\n"
                     else:
                         server_message += "🔄 *Transcodificando:* Desconocido\n"
+                    
+                    # Añadir botón para detener la reproducción
+                    keyboard.append([InlineKeyboardButton(f"❌ Detener reproducción de {session.usernames[0]}", 
+                                                          callback_data=f"stop_stream_{server_index}_{session.sessionKey}")])
+                    
                     server_message += "\n"  # Agregar una línea en blanco entre usuarios
             
             if server_transcoding_video > 0 or server_transcoding_audio > 0:
@@ -530,6 +555,90 @@ def show_transcoding_users(update: Update, context: CallbackContext) -> None:
     else:
         message = (f"*Transcodificando Video:* {total_transcoding_video} usuarios\n"
                    f"*Transcodificando Audio:* {total_transcoding_audio} usuarios\n\n") + message
+    
+    keyboard.append([InlineKeyboardButton("🏠 Volver al Menú Principal", callback_data="main_menu")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    edit_message_with_image(update, context, message, reply_markup)
+
+def stop_user_stream(update: Update, context: CallbackContext, server_index: int, session_key: str) -> None:
+    logger.info(f"Deteniendo reproducción del usuario en el servidor {server_index}, sesión {session_key}")
+    if not is_authorized(update):
+        return
+    
+    try:
+        server = PLEX_SERVERS[server_index]
+        plex = PlexServer(server['url'], server['token'])
+        sessions = plex.sessions()
+        logger.info(f"Sesiones activas en el servidor: {len(sessions)}")
+        
+        session = next((s for s in sessions if str(s.sessionKey) == str(session_key)), None)
+        if session:
+            logger.info(f"Sesión encontrada: {session.title} - Usuario: {session.usernames[0]}")
+            session.stop(reason="¡Atención! 🚨\n\nEstás reproduciendo contenido con transcode, lo que no solo afecta la calidad de imagen, sino que también carga más el servidor. Para obtener la mejor experiencia, te recomendamos ir a los ajustes de Plex y seleccionar \"Calidad máxima\" o \"Original\".\n\n🔧 Consejo útil: Si estás usando Wi-Fi, la señal puede no ser suficiente. ¿Por qué no pruebas conectar tu dispositivo por cable para una experiencia más fluida?\n\n¡Disfruta del contenido sin interrupciones! 🎥📶")
+            message = f"✅ Se ha detenido la reproducción del usuario {escape_markdown(session.usernames[0])}.\n"
+            message += "Se le ha enviado un mensaje para que revise su configuración."
+        else:
+            logger.warning(f"No se encontró la sesión con clave {session_key}")
+            active_sessions = "\n".join([f"- {s.sessionKey}: {s.title} ({s.usernames[0]})" for s in sessions])
+            logger.info(f"Sesiones activas:\n{active_sessions}")
+            message = f"❌ No se encontró la sesión especificada (clave: {session_key}).\n"
+            message += "Es posible que la reproducción ya haya terminado."
+    except Exception as e:
+        logger.error(f"Error al detener la reproducción: {str(e)}")
+        message = f"❌ Error al detener la reproducción: {str(e)}"
+    
+    keyboard = [[InlineKeyboardButton("🔙 Volver a usuarios transcodificando", callback_data="transcoding_users")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    edit_message_with_image(update, context, message, reply_markup)
+
+def show_maintenance_options(update: Update, context: CallbackContext) -> None:
+    logger.info("Mostrando opciones de mantenimiento")
+    if not is_authorized(update):
+        return
+    keyboard = [
+        [InlineKeyboardButton(f"🛠️ Mantenimiento {PLEX_SERVERS[0]['name']}", callback_data='maintenance_1')],
+        [InlineKeyboardButton(f"🛠️ Mantenimiento {PLEX_SERVERS[1]['name']}", callback_data='maintenance_2')],
+        [InlineKeyboardButton("🛠️ Mantenimiento General", callback_data='maintenance_all')],
+        [InlineKeyboardButton("🔙 Volver al Menú Principal", callback_data="main_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    edit_message_with_image(update, context, "Selecciona una opción de mantenimiento:", reply_markup)
+
+def perform_maintenance(update: Update, context: CallbackContext, server_indices: List[int]) -> None:
+    logger.info(f"Realizando mantenimiento en servidores: {server_indices}")
+    if not is_authorized(update):
+        return
+    
+    maintenance_message = (
+        "¡Atención! 🚨\n\n"
+        "Estamos realizando tareas de mantenimiento y, por ello, todas las reproducciones actuales se detendrán temporalmente. "
+        "Te pedimos disculpas por los inconvenientes y agradecemos tu comprensión mientras mejoramos la experiencia.\n\n"
+        "🔧 Consejo útil: Después de restablecer el servicio, es posible que tu sesión quede colgada. "
+        "En ese caso, te recomendamos reiniciar tu televisor o dispositivo para continuar sin problemas.\n\n"
+        "⏳ Si necesitas saber el tiempo estimado de la caída, por favor consulta a SinCracK.\n\n"
+        "¡Gracias por tu paciencia! 🙏🎥"
+    )
+    
+    stopped_streams = 0
+    for index in server_indices:
+        try:
+            server = PLEX_SERVERS[index]
+            plex = PlexServer(server['url'], server['token'])
+            sessions = plex.sessions()
+            
+            for session in sessions:
+                session.stop(reason=maintenance_message)
+                stopped_streams += 1
+            
+            logger.info(f"Detenidas {len(sessions)} reproducciones en el servidor {server['name']}")
+        except Exception as e:
+            logger.error(f"Error al realizar mantenimiento en el servidor {index}: {str(e)}")
+    
+    if len(server_indices) == 1:
+        server_name = PLEX_SERVERS[server_indices[0]]['name']
+        message = f"✅ Mensaje de mantenimiento enviado en {server_name}. Se detuvieron {stopped_streams} reproducciones."
+    else:
+        message = f"✅ Mensaje de mantenimiento general enviado. Se detuvieron {stopped_streams} reproducciones en total."
     
     keyboard = [[InlineKeyboardButton("🏠 Volver al Menú Principal", callback_data="main_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
