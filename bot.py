@@ -86,6 +86,7 @@ def show_main_menu(update: Update, context: CallbackContext) -> None:
     keyboard = [
         [InlineKeyboardButton("🖥️ Ver servidores", callback_data='view_servers')],
         [InlineKeyboardButton("🎬 Streams actuales", callback_data='current_streams')],
+        [InlineKeyboardButton("👥 Usuarios con múltiples streams", callback_data='multiple_streams')],
         [InlineKeyboardButton("🔄 Usuarios transcodificando", callback_data='transcoding_users')],
         [InlineKeyboardButton("🛠️ Modo Mantenimiento", callback_data='maintenance_mode')],
         [InlineKeyboardButton("ℹ️ Obtener Ayuda", callback_data='help')]
@@ -149,6 +150,8 @@ def button(update: Update, context: CallbackContext) -> None:
             perform_maintenance(update, context, [1])
         elif query.data == 'maintenance_all':
             perform_maintenance(update, context, [0, 1])
+        elif query.data == 'multiple_streams':
+            show_users_with_multiple_streams(update, context)
     except Exception as e:
         logger.error(f"Error en el manejo de botones: {str(e)}")
         error_message = f"Lo siento, ha ocurrido un error: {str(e)}"
@@ -639,6 +642,59 @@ def perform_maintenance(update: Update, context: CallbackContext, server_indices
         message = f"✅ Mensaje de mantenimiento enviado en {server_name}. Se detuvieron {stopped_streams} reproducciones."
     else:
         message = f"✅ Mensaje de mantenimiento general enviado. Se detuvieron {stopped_streams} reproducciones en total."
+    
+    keyboard = [[InlineKeyboardButton("🏠 Volver al Menú Principal", callback_data="main_menu")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    edit_message_with_image(update, context, message, reply_markup)
+
+def show_users_with_multiple_streams(update: Update, context: CallbackContext) -> None:
+    logger.info("Mostrando usuarios con múltiples streams")
+    if not is_authorized(update):
+        return
+    
+    message = "👥 *Usuarios con múltiples streams:*\n\n"
+    users_with_multiple_streams = {}
+    
+    for server in PLEX_SERVERS:
+        try:
+            plex = PlexServer(server['url'], server['token'])
+            sessions = plex.sessions()
+            
+            for session in sessions:
+                username = session.usernames[0]
+                ip_address = session.player.address
+                
+                if username not in users_with_multiple_streams:
+                    users_with_multiple_streams[username] = []
+                
+                users_with_multiple_streams[username].append({
+                    'server': server['name'],
+                    'ip': ip_address,
+                    'title': session.title,
+                    'type': 'Película' if session.type == 'movie' else 'Episodio' if session.type == 'episode' else session.type.capitalize()
+                })
+        except Exception as e:
+            logger.error(f"Error al obtener sesiones de {server['name']}: {str(e)}")
+    
+    for username, streams in users_with_multiple_streams.items():
+        if len(streams) > 1:
+            message += f"*Usuario:* {escape_markdown(username)}\n"
+            unique_ips = set(stream['ip'] for stream in streams)
+            
+            if len(unique_ips) > 1:
+                message += f"⚠️ *Reproduciendo desde {len(unique_ips)} direcciones IP diferentes*\n"
+            else:
+                message += "✅ Todas las reproducciones desde la misma IP\n"
+            
+            for stream in streams:
+                message += f"  - *Servidor:* {escape_markdown(stream['server'])}\n"
+                message += f"    *IP:* {stream['ip']}\n"
+                message += f"    *Contenido:* {escape_markdown(stream['title'])} ({stream['type']})\n"
+            
+            message += "\n"
+    
+    if not any(len(streams) > 1 for streams in users_with_multiple_streams.values()):
+        message = "😴 No hay usuarios con múltiples streams en este momento."
     
     keyboard = [[InlineKeyboardButton("🏠 Volver al Menú Principal", callback_data="main_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
