@@ -23,22 +23,6 @@ services:
         max-size: "200k"
         max-file: "10"
 
-  telegram-bot-api:
-    image: atareao/telegram-bot-api
-    container_name: telegram-bot-api
-    init: true
-    restart: always
-    volumes:
-      - data:/var/lib/telegram-bot-api
-    environment:
-      TELEGRAM_API_ID: TU API DE TELEGRAM
-      TELEGRAM_API_HASH: TU API HASH DE TELEGRAM
-      TELEGRAM_LOCAL: true
-    ports:
-      - "8089:8081"
-    networks:
-      - plexcontroller
-
 networks:
   plexcontroller:
     driver: bridge
