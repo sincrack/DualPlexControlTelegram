@@ -8,15 +8,15 @@ from plexapi.server import PlexServer
 from config import TELEGRAM_BOT_TOKEN, PLEX_SERVERS, GLANCES_SERVERS
 import os
 
-# FunciÃ³n de utilidad para escapar caracteres especiales de Markdown
+# Función de utilidad para escapar caracteres especiales de Markdown
 def escape_markdown(text):
     """
-    Escapa los caracteres especiales de Markdown en el texto.
+    Escapa solo los caracteres especiales de Markdown necesarios en el texto.
     """
-    escape_chars = r'_*[]()~`>#+-=|{}.!'
-    return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', str(text))
+    escape_chars = '_*[]()~`>#+-='
+    return ''.join(f'\\{char}' if char in escape_chars else char for char in str(text))
 
-# ConfiguraciÃ³n de logging
+# Configuración de logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -31,7 +31,7 @@ AUTHORIZED_CHAT_IDS = [-1234567890, -9876543210]
 AUTHORIZED_USERNAME = "TuNombreDeUsuario"
 
 def is_authorized(update: Update) -> bool:
-    """Verifica si el usuario estÃ¡ autorizado para usar el bot."""
+    """Verifica si el usuario está autorizado para usar el bot."""
     if update.effective_chat.id in AUTHORIZED_CHAT_IDS:
         return True
     if update.effective_user and update.effective_user.username == AUTHORIZED_USERNAME:
@@ -74,33 +74,33 @@ def edit_message_with_image(update: Update, context: CallbackContext, text: str,
 def start(update: Update, context: CallbackContext) -> None:
     logger.info("Comando /start recibido")
     if not is_authorized(update):
-        update.message.reply_text("Lo siento, no estÃ¡s autorizado para usar este bot.")
+        update.message.reply_text("Lo siento, no estás autorizado para usar este bot.")
         return
     show_main_menu(update, context)
 
 def show_main_menu(update: Update, context: CallbackContext) -> None:
-    logger.info("Mostrando menÃº principal")
+    logger.info("Mostrando menú principal")
     if not is_authorized(update):
         return
     keyboard = [
-        [InlineKeyboardButton("ðŸ–¥ï¸ Ver servidores", callback_data='view_servers')],
-        [InlineKeyboardButton("ðŸŽ¬ Streams actuales", callback_data='current_streams')],
-        [InlineKeyboardButton("ðŸ”„ Usuarios transcodificando", callback_data='transcoding_users')],
-        [InlineKeyboardButton("â„¹ï¸ Obtener Ayuda", callback_data='help')]
+        [InlineKeyboardButton("🖥️ Ver servidores", callback_data='view_servers')],
+        [InlineKeyboardButton("🎬 Streams actuales", callback_data='current_streams')],
+        [InlineKeyboardButton("🔄 Usuarios transcodificando", callback_data='transcoding_users')],
+        [InlineKeyboardButton("ℹ️ Obtener Ayuda", callback_data='help')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    welcome_text = ('Â¡Hola! ðŸŽ¬âœ¨\n\n'
+    welcome_text = ('¡Hola! 🎬✨\n\n'
                    'Bienvenido a Dual Plex Control, tu centro de mando para gestionar Plex de manera sencilla y eficiente.\n\n'
-                   'Â¿Preparado para tomar el control total de tu experiencia multimedia? ðŸš€\n\n'
-                   'Dime, Â¿quÃ© te gustarÃ­a hacer hoy?')
+                   '¿Preparado para tomar el control total de tu experiencia multimedia? 🚀\n\n'
+                   'Dime, ¿qué te gustaría hacer hoy?')
     
     edit_message_with_image(update, context, welcome_text, reply_markup)
 
 def button(update: Update, context: CallbackContext) -> None:
-    logger.info("BotÃ³n presionado")
+    logger.info("Botón presionado")
     if not is_authorized(update):
-        update.callback_query.answer("No estÃ¡s autorizado para usar este bot, ponte en contacto con @SinCracK")
+        update.callback_query.answer("No estás autorizado para usar este bot, ponte en contacto con @SinCracK")
         return
     query = update.callback_query
     query.answer()
@@ -134,7 +134,7 @@ def button(update: Update, context: CallbackContext) -> None:
     except Exception as e:
         logger.error(f"Error en el manejo de botones: {str(e)}")
         error_message = f"Lo siento, ha ocurrido un error: {str(e)}"
-        keyboard = [[InlineKeyboardButton("ðŸ  Volver al MenÃº Principal", callback_data="main_menu")]]
+        keyboard = [[InlineKeyboardButton("🏠 Volver al Menú Principal", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         edit_message_with_image(update, context, error_message, reply_markup)
 
@@ -142,25 +142,25 @@ def show_servers(update: Update, context: CallbackContext) -> None:
     logger.info("Mostrando servidores")
     if not is_authorized(update):
         return
-    keyboard = [[InlineKeyboardButton(f"ðŸ™ï¸ {server['name']}", callback_data=f"server_{i}")] for i, server in enumerate(PLEX_SERVERS)]
-    keyboard.append([InlineKeyboardButton("ðŸ”™ Volver al MenÃº Principal", callback_data="main_menu")])
+    keyboard = [[InlineKeyboardButton(f"🏙️ {server['name']}", callback_data=f"server_{i}")] for i, server in enumerate(PLEX_SERVERS)]
+    keyboard.append([InlineKeyboardButton("🔙 Volver al Menú Principal", callback_data="main_menu")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    edit_message_with_image(update, context, "Â¡Elige el servidor! ðŸ‘‘", reply_markup)
+    edit_message_with_image(update, context, "¡Elige el servidor! 👑", reply_markup)
 
 def show_server_options(update: Update, context: CallbackContext, server: dict) -> None:
     logger.info(f"Mostrando opciones para el servidor: {server['name']}")
     if not is_authorized(update):
         return
     keyboard = [
-        [InlineKeyboardButton("ðŸ”„ Actualizar bibliotecas", callback_data=f"update_{PLEX_SERVERS.index(server)}")],
-        [InlineKeyboardButton("ðŸ‘€ Ver reproducciones", callback_data=f"playing_{PLEX_SERVERS.index(server)}")],
-        [InlineKeyboardButton("ðŸ“Š Ver estado del servidor", callback_data=f"status_{PLEX_SERVERS.index(server)}")],
-        [InlineKeyboardButton("ðŸ“š Bibliotecas", callback_data=f"stats_{PLEX_SERVERS.index(server)}")],
-        [InlineKeyboardButton("ðŸ”™ Volver a Servidores", callback_data="view_servers")],
-        [InlineKeyboardButton("ðŸ  Volver al MenÃº Principal", callback_data="main_menu")]
+        [InlineKeyboardButton("🔄 Actualizar bibliotecas", callback_data=f"update_{PLEX_SERVERS.index(server)}")],
+        [InlineKeyboardButton("👀 Ver reproducciones", callback_data=f"playing_{PLEX_SERVERS.index(server)}")],
+        [InlineKeyboardButton("📊 Ver estado del servidor", callback_data=f"status_{PLEX_SERVERS.index(server)}")],
+        [InlineKeyboardButton("📚 Bibliotecas", callback_data=f"stats_{PLEX_SERVERS.index(server)}")],
+        [InlineKeyboardButton("🔙 Volver a Servidores", callback_data="view_servers")],
+        [InlineKeyboardButton("🏠 Volver al Menú Principal", callback_data="main_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    edit_message_with_image(update, context, f"Â¿QuÃ© quieres hacer en {server['name']}? âœ¨", reply_markup)
+    edit_message_with_image(update, context, f"¿Qué quieres hacer en {server['name']}? ✨", reply_markup)
 
 def update_libraries(update: Update, context: CallbackContext, server: dict) -> None:
     logger.info(f"Actualizando bibliotecas en el servidor: {server['name']}")
@@ -170,17 +170,17 @@ def update_libraries(update: Update, context: CallbackContext, server: dict) -> 
         plex = PlexServer(server['url'], server['token'])
         for section in plex.library.sections():
             section.update()
-        success_message = f"Â¡Boom! ðŸ’¥ Bibliotecas actualizadas en {server['name']}. Â¡Tu contenido estÃ¡ mÃ¡s fresco que nunca! ðŸŒŸ"
+        success_message = f"¡Boom! 💥 Bibliotecas actualizadas en {server['name']}. ¡Tu contenido está más fresco que nunca! 🌟"
         keyboard = [
-            [InlineKeyboardButton("ðŸ”™ Volver a Opciones del Servidor", callback_data=f"server_{PLEX_SERVERS.index(server)}")],
-            [InlineKeyboardButton("ðŸ  Volver al MenÃº Principal", callback_data="main_menu")]
+            [InlineKeyboardButton("🔙 Volver a Opciones del Servidor", callback_data=f"server_{PLEX_SERVERS.index(server)}")],
+            [InlineKeyboardButton("🏠 Volver al Menú Principal", callback_data="main_menu")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         edit_message_with_image(update, context, success_message, reply_markup)
     except Exception as e:
         logger.error(f"Error al actualizar bibliotecas: {str(e)}")
         error_message = f"Error al actualizar bibliotecas en {server['name']}: {str(e)}"
-        keyboard = [[InlineKeyboardButton("ðŸ  Volver al MenÃº Principal", callback_data="main_menu")]]
+        keyboard = [[InlineKeyboardButton("🏠 Volver al Menú Principal", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         edit_message_with_image(update, context, error_message, reply_markup)
 
@@ -192,33 +192,33 @@ def view_playing(update: Update, context: CallbackContext, server: dict) -> None
         plex = PlexServer(server['url'], server['token'])
         sessions = plex.sessions()
         if sessions:
-            message = f"ðŸŽ¬ Â¡AcciÃ³n en *{server['name']}*! Esto es lo que estÃ¡ pasando:\n\n"
+            message = f"🎬 ¡Acción en *{server['name']}*! Esto es lo que está pasando:\n\n"
             for session in sessions:
-                message += f"ðŸ‘¤ *Usuario:* {escape_markdown(session.usernames[0])}\n"
+                message += f"👤 *Usuario:* {escape_markdown(session.usernames[0])}\n"
                 if session.type == 'episode':
-                    message += f"ðŸŽ¥ *Serie:* {escape_markdown(session.grandparentTitle)}\n"
-                    message += f"ðŸ“º *Episodio:* {escape_markdown(session.title)}\n"
+                    message += f"🎥 *Serie:* {escape_markdown(session.grandparentTitle)}\n"
+                    message += f"📺 *Episodio:* {escape_markdown(session.title)}\n"
                 else:
-                    message += f"ðŸŽ¥ *TÃ­tulo:* {escape_markdown(session.title)}\n"
+                    message += f"🎥 *Título:* {escape_markdown(session.title)}\n"
                 if session.type == 'movie':
-                    session_type = 'PelÃ­cula'
+                    session_type = 'Película'
                 elif session.type == 'episode':
                     session_type = 'Episodio'
                 else:
                     session_type = session.type.capitalize()
-                message += f"ðŸ“º *Tipo:* {escape_markdown(session_type)}\n"
-                message += f"â³ *Progreso:* {session.viewOffset // 60000} minutos\n"
-                message += f"ðŸ–¥ï¸ *Reproductor:* {escape_markdown(session.player.title)}\n"
+                message += f"📺 *Tipo:* {escape_markdown(session_type)}\n"
+                message += f"⏳ *Progreso:* {session.viewOffset // 60000} minutos\n"
+                message += f"🖥️ *Reproductor:* {escape_markdown(session.player.title)}\n"
                 message += f"\n"
         else:
-            message = f"ðŸ˜´ Parece que {server['name']} estÃ¡ tomando una siesta. Â¡No hay reproducciones en curso!"
+            message = f"😴 Parece que {server['name']} está tomando una siesta. ¡No hay reproducciones en curso!"
     except Exception as e:
         logger.error(f"Error al obtener reproducciones: {str(e)}")
         message = f"Error al obtener reproducciones de {server['name']}: {str(e)}"
     
     keyboard = [
-        [InlineKeyboardButton("ðŸ”™ Volver a Opciones del Servidor", callback_data=f"server_{PLEX_SERVERS.index(server)}")],
-        [InlineKeyboardButton("ðŸ  Volver al MenÃº Principal", callback_data="main_menu")]
+        [InlineKeyboardButton("🔙 Volver a Opciones del Servidor", callback_data=f"server_{PLEX_SERVERS.index(server)}")],
+        [InlineKeyboardButton("🏠 Volver al Menú Principal", callback_data="main_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     edit_message_with_image(update, context, message, reply_markup)
@@ -230,7 +230,7 @@ def show_current_streams(update: Update, context: CallbackContext) -> None:
     
     total_users = 0
     total_transcoding = 0
-    message = "ðŸŽ¬ *Streams actuales en todos los servidores:*\n\n"
+    message = "🎬 *Streams actuales en todos los servidores:*\n\n"
     
     for server in PLEX_SERVERS:
         try:
@@ -244,28 +244,28 @@ def show_current_streams(update: Update, context: CallbackContext) -> None:
             message += f"*Servidor {escape_markdown(server['name'])}* ({server_users} usuarios activos):\n"
             if sessions:
                 for session in sessions:
-                    message += f"ðŸ‘¤ *Usuario:* {escape_markdown(session.usernames[0])}\n"
+                    message += f"👤 *Usuario:* {escape_markdown(session.usernames[0])}\n"
                     if session.type == 'episode':
-                        message += f"ðŸŽ¥ *Serie:* {escape_markdown(session.grandparentTitle)}\n"
-                        message += f"ðŸ“º *Episodio:* {escape_markdown(session.title)}\n"
+                        message += f"🎥 *Serie:* {escape_markdown(session.grandparentTitle)}\n"
+                        message += f"📺 *Episodio:* {escape_markdown(session.title)}\n"
                     else:
-                        message += f"ðŸŽ¥ *TÃ­tulo:* {escape_markdown(session.title)}\n"
+                        message += f"🎥 *Título:* {escape_markdown(session.title)}\n"
                     if session.type == 'movie':
-                        session_type = 'PelÃ­cula'
+                        session_type = 'Película'
                     elif session.type == 'episode':
                         session_type = 'Episodio'
                     else:
                         session_type = session.type.capitalize()
-                    message += f"ðŸ“º *Tipo:* {escape_markdown(session_type)}\n"
-                    message += f"â³ *Progreso:* {session.viewOffset // 60000} minutos\n"
+                    message += f"📺 *Tipo:* {escape_markdown(session_type)}\n"
+                    message += f"⏳ *Progreso:* {session.viewOffset // 60000} minutos\n"
 
-                    # Verificar si se estÃ¡ realizando transcodificaciÃ³n
+                    # Verificar si se está realizando transcodificación
                     if session.transcodeSessions:
-                        message += "ðŸ”„ *Transcodificando:* SÃ­\n"
+                        message += "🔄 *Transcodificando:* Sí\n"
                         server_transcoding += 1
                     else:
-                        message += "ðŸ”„ *Transcodificando:* No\n"
-                    message += f"ðŸ–¥ï¸ *Reproductor:* {escape_markdown(session.player.title)}\n"
+                        message += "🔄 *Transcodificando:* No\n"
+                    message += f"🖥️ *Reproductor:* {escape_markdown(session.player.title)}\n"
                     message += "\n"
                 
                 total_transcoding += server_transcoding
@@ -276,9 +276,9 @@ def show_current_streams(update: Update, context: CallbackContext) -> None:
             message += f"Error al conectar con {escape_markdown(server['name'])}: {str(e)}\n\n"
     
     message = (f"*Total de usuarios activos:* {total_users}\n"
-               f"*Usuarios realizando transcodificaciÃ³n:* {total_transcoding}\n\n") + message
+               f"*Usuarios realizando transcodificación:* {total_transcoding}\n\n") + message
     
-    keyboard = [[InlineKeyboardButton("ðŸ  Volver al MenÃº Principal", callback_data="main_menu")]]
+    keyboard = [[InlineKeyboardButton("🏠 Volver al Menú Principal", callback_data="main_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     edit_message_with_image(update, context, message, reply_markup)
 
@@ -343,9 +343,9 @@ def get_glances_data(url):
             else:
                 uptime = 'No disponible'
             
-            return f"Uso de CPU: {cpu_usage:.1f}%\nUso de RAM: {mem_usage:.1f}%\nIP PÃºblica: {public_ip}\nIP Privada: {private_ip}\nTiempo de actividad: {uptime}"
+            return f"Uso de CPU: {cpu_usage:.1f}%\nUso de RAM: {mem_usage:.1f}%\nIP Pública: {public_ip}\nIP Privada: {private_ip}\nTiempo de actividad: {uptime}"
         else:
-            return f"Error al obtener datos. CÃ³digos de estado - CPU: {cpu_response.status_code}, RAM: {mem_response.status_code}, IP: {ip_response.status_code}, Uptime: {uptime_response.status_code}"
+            return f"Error al obtener datos. Códigos de estado - CPU: {cpu_response.status_code}, RAM: {mem_response.status_code}, IP: {ip_response.status_code}, Uptime: {uptime_response.status_code}"
     except requests.RequestException as e:
         return f"Error al conectar con Glances: {str(e)}"
     except ValueError as e:
@@ -357,37 +357,38 @@ def show_server_status(update: Update, context: CallbackContext, server: dict) -
         return
     try:
         plex = PlexServer(server['url'], server['token'])
-        status = "ðŸŸ¢ En lÃ­nea"
+        status = "🟢 En línea"
         
-        message = f"ðŸ“Š *Estado del servidor {escape_markdown(server['name'])}:*\n\n"
+        message = f"📊 *Estado del servidor {escape_markdown(server['name'])}:*\n\n"
         message += f"*Estado:* {status}\n"
-        message += f"*VersiÃ³n:* {escape_markdown(plex.version)}\n"
+        message += f"*Versión:* {plex.version}\n"
         message += f"*Plataforma:* {escape_markdown(plex.platform)}\n"
         message += f"*Identificador:* {escape_markdown(plex.machineIdentifier)}\n\n"
         
+
         if hasattr(plex, 'myPlexAccount'):
             account = plex.myPlexAccount()
             if account:
                 message += f"*Nombre de la cuenta:* {escape_markdown(account.username)}\n"
-                message += f"*Email de la cuenta:* {escape_markdown(account.email)}\n"
+                message += f"*Email de la cuenta:* {account.email}\n"
         if hasattr(plex, 'friendlyName'):
-            message += f"*Nombre amigable:* {escape_markdown(plex.friendlyName)}\n"
+            message += f"*Nombre amigable:* {plex.friendlyName}\n"
         
-        # Obtener informaciÃ³n de Glances
+        # Obtener información de Glances
         glances_server = next((s for s in GLANCES_SERVERS if s['name'].lower() == server['name'].lower()), None)
         if glances_server:
             glances_data = get_glances_data(glances_server['url'])
             if not glances_data.startswith("Error"):
                 cpu_usage, ram_usage, public_ip, private_ip, uptime = glances_data.split('\n')
-                message += f"\nðŸ’» *{cpu_usage}*\n"
-                message += f"ðŸ§  *{ram_usage}*\n"
-                message += f"ðŸŒ *{public_ip}*\n"
-                message += f"ðŸ  *{private_ip}*\n"
-                message += f"â±ï¸ *{uptime}*\n"
+                message += f"\n💻 *{cpu_usage}*\n"
+                message += f"🧠 *{ram_usage}*\n"
+                message += f"🌐 *{public_ip}*\n"
+                message += f"🏠 *{private_ip}*\n"
+                message += f"⏱️ *{uptime}*\n"
             else:
-                message += f"\nâš ï¸ {glances_data}\n"
+                message += f"\n⚠️ {glances_data}\n"
         else:
-            message += f"\nâš ï¸ No se encontrÃ³ configuraciÃ³n de Glances para el servidor {escape_markdown(server['name'])}\n"
+            message += f"\n⚠️ No se encontró configuración de Glances para el servidor {escape_markdown(server['name'])}\n"
 
         sessions = plex.sessions()
         active_streams = len(sessions)
@@ -401,30 +402,30 @@ def show_server_status(update: Update, context: CallbackContext, server: dict) -
 
     except Exception as e:
         logger.error(f"Error al obtener el estado del servidor: {str(e)}")
-        status = "ðŸ”´ Fuera de lÃ­nea"
-        message = f"ðŸ“Š *Estado del servidor {escape_markdown(server['name'])}:*\n\n"
+        status = "🔴 Fuera de línea"
+        message = f"📊 *Estado del servidor {escape_markdown(server['name'])}:*\n\n"
         message += f"*Estado:* {status}\n"
-        message += f"Error: No se pudo conectar al servidor o obtener informaciÃ³n. Detalles: {str(e)}\n"
+        message += f"Error: No se pudo conectar al servidor o obtener información. Detalles: {str(e)}\n"
     
     keyboard = [
-        [InlineKeyboardButton("ðŸ”™ Volver a Opciones del Servidor", callback_data=f"server_{PLEX_SERVERS.index(server)}")],
-        [InlineKeyboardButton("ðŸ  Volver al MenÃº Principal", callback_data="main_menu")]
+        [InlineKeyboardButton("🔙 Volver a Opciones del Servidor", callback_data=f"server_{PLEX_SERVERS.index(server)}")],
+        [InlineKeyboardButton("🏠 Volver al Menú Principal", callback_data="main_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     edit_message_with_image(update, context, message, reply_markup)
 
 def show_library_stats(update: Update, context: CallbackContext, server: dict) -> None:
-    logger.info(f"Mostrando estadÃ­sticas de la biblioteca: {server['name']}")
+    logger.info(f"Mostrando estadísticas de la biblioteca: {server['name']}")
     if not is_authorized(update):
         return
     try:
         plex = PlexServer(server['url'], server['token'])
-        message = f"ðŸ“š *Bibliotecas de {escape_markdown(server['name'])}:*\n\n"
+        message = f"📚 *Bibliotecas de {escape_markdown(server['name'])}:*\n\n"
         
         for section in plex.library.sections():
-            message += f"ðŸ“ *{escape_markdown(section.title)}:*\n"
+            message += f"📁 *{escape_markdown(section.title)}:*\n"
             if section.type == 'movie':
-                section_type = 'PelÃ­cula'
+                section_type = 'Película'
             elif section.type == 'show':
                 section_type = 'Serie'
             else:
@@ -432,12 +433,12 @@ def show_library_stats(update: Update, context: CallbackContext, server: dict) -
             message += f"   - *Tipo:* {escape_markdown(section_type)}\n"
             message += f"   - *Total de elementos:* {section.totalSize}\n\n"
     except Exception as e:
-        logger.error(f"Error al obtener estadÃ­sticas de la biblioteca: {str(e)}")
-        message = f"Error al obtener estadÃ­sticas de la biblioteca {escape_markdown(server['name'])}: {str(e)}"
+        logger.error(f"Error al obtener estadísticas de la biblioteca: {str(e)}")
+        message = f"Error al obtener estadísticas de la biblioteca {escape_markdown(server['name'])}: {str(e)}"
     
     keyboard = [
-        [InlineKeyboardButton("ðŸ”™ Volver a Opciones del Servidor", callback_data=f"server_{PLEX_SERVERS.index(server)}")],
-        [InlineKeyboardButton("ðŸ  Volver al MenÃº Principal", callback_data="main_menu")]
+        [InlineKeyboardButton("🔙 Volver a Opciones del Servidor", callback_data=f"server_{PLEX_SERVERS.index(server)}")],
+        [InlineKeyboardButton("🏠 Volver al Menú Principal", callback_data="main_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     edit_message_with_image(update, context, message, reply_markup)
@@ -447,18 +448,18 @@ def show_help(update: Update, context: CallbackContext) -> None:
     if not is_authorized(update):
         return
     help_text = (
-        "ðŸ¦¸â€â™‚ï¸ Â¡Bienvenido al Centro de Ayuda del Bot! ðŸ¦¸â€â™€ï¸\n\n"
-        "AquÃ­ tienes una guÃ­a rÃ¡pida de lo que puedo hacer:\n\n"
-        "ðŸ–¥ï¸ *Ver servidores:* Te muestra una lista de tus servidores Plex.\n"
-        "ðŸ”„ *Actualizar bibliotecas:* Actualiza todas las bibliotecas en un servidor especÃ­fico.\n"
-        "ðŸ‘€ *Ver reproducciones:* Muestra quÃ© se estÃ¡ reproduciendo actualmente en un servidor.\n"
-        "ðŸ“Š *Estado del servidor:* Muestra informaciÃ³n sobre el estado y la versiÃ³n del servidor.\n"
-        "ðŸ“š *Bibliotecas:* Muestra las bibliotecas del servidor.\n"
-        "ðŸŽ¬ *Streams actuales:* Muestra todos los streams activos en tus servidores Plex.\n"
-        "ðŸ”„ *Usuarios transcodificando:* Muestra los usuarios que estÃ¡n realizando transcodificaciÃ³n.\n\n"
-        "Â¡No dudes en contactar conmigo si tienes dudas @SinCracK ! ðŸŽ‰"
+        "🦸‍♂️ ¡Bienvenido al Centro de Ayuda del Bot! 🦸‍♀️\n\n"
+        "Aquí tienes una guía rápida de lo que puedo hacer:\n\n"
+        "🖥️ *Ver servidores:* Te muestra una lista de tus servidores Plex.\n"
+        "🔄 *Actualizar bibliotecas:* Actualiza todas las bibliotecas en un servidor específico.\n"
+        "👀 *Ver reproducciones:* Muestra qué se está reproduciendo actualmente en un servidor.\n"
+        "📊 *Estado del servidor:* Muestra información sobre el estado y la versión del servidor.\n"
+        "📚 *Bibliotecas:* Muestra las bibliotecas del servidor.\n"
+        "🎬 *Streams actuales:* Muestra todos los streams activos en tus servidores Plex.\n"
+        "🔄 *Usuarios transcodificando:* Muestra los usuarios que están realizando transcodificación.\n\n"
+        "¡No dudes en contactar conmigo si tienes dudas @SinCracK ! 🎉"
     )
-    keyboard = [[InlineKeyboardButton("ðŸ  Volver al MenÃº Principal", callback_data="main_menu")]]
+    keyboard = [[InlineKeyboardButton("🏠 Volver al Menú Principal", callback_data="main_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     edit_message_with_image(update, context, help_text, reply_markup)
 
@@ -467,7 +468,7 @@ def show_transcoding_users(update: Update, context: CallbackContext) -> None:
     if not is_authorized(update):
         return
     
-    message = "ðŸ”„ *Usuarios realizando transcodificaciÃ³n:*\n\n"
+    message = "🔄 *Usuarios realizando transcodificación:*\n\n"
     total_transcoding_video = 0
     total_transcoding_audio = 0
     
@@ -491,27 +492,27 @@ def show_transcoding_users(update: Update, context: CallbackContext) -> None:
                             transcode_type.append('Audio')
                             server_transcoding_audio += 1
                     
-                    server_message += f"ðŸ‘¤ *Usuario:* {escape_markdown(session.usernames[0])}\n"
+                    server_message += f"👤 *Usuario:* {escape_markdown(session.usernames[0])}\n"
                     if session.type == 'episode':
-                        server_message += f"ðŸŽ¥ *Serie:* {escape_markdown(session.grandparentTitle)}\n"
-                        server_message += f"ðŸ“º *Episodio:* {escape_markdown(session.title)}\n"
+                        server_message += f"🎥 *Serie:* {escape_markdown(session.grandparentTitle)}\n"
+                        server_message += f"📺 *Episodio:* {escape_markdown(session.title)}\n"
                     else:
-                        server_message += f"ðŸŽ¥ *TÃ­tulo:* {escape_markdown(session.title)}\n"
+                        server_message += f"🎥 *Título:* {escape_markdown(session.title)}\n"
                     if session.type == 'movie':
-                        session_type = 'PelÃ­cula'
+                        session_type = 'Película'
                     elif session.type == 'episode':
                         session_type = 'Episodio'
                     else:
                         session_type = session.type.capitalize()
-                    server_message += f"ðŸ“º *Tipo:* {escape_markdown(session_type)}\n"
-                    server_message += f"â³ *Progreso:* {session.viewOffset // 60000} minutos\n"
-                    server_message += f"ðŸ–¥ï¸ *Reproductor:* {escape_markdown(session.player.title)}\n"
+                    server_message += f"📺 *Tipo:* {escape_markdown(session_type)}\n"
+                    server_message += f"⏳ *Progreso:* {session.viewOffset // 60000} minutos\n"
+                    server_message += f"🖥️ *Reproductor:* {escape_markdown(session.player.title)}\n"
                     
                     if transcode_type:
-                        server_message += f"ðŸ”„ *Transcodificando:* {' y '.join(transcode_type)}\n"
+                        server_message += f"🔄 *Transcodificando:* {' y '.join(transcode_type)}\n"
                     else:
-                        server_message += "ðŸ”„ *Transcodificando:* Desconocido\n"
-                    server_message += "\n"  # Agregar una lÃ­nea en blanco entre usuarios
+                        server_message += "🔄 *Transcodificando:* Desconocido\n"
+                    server_message += "\n"  # Agregar una línea en blanco entre usuarios
             
             if server_transcoding_video > 0 or server_transcoding_audio > 0:
                 message += server_message
@@ -525,12 +526,12 @@ def show_transcoding_users(update: Update, context: CallbackContext) -> None:
             message += f"Error al conectar con {escape_markdown(server['name'])}: {str(e)}\n\n"
     
     if total_transcoding_video == 0 and total_transcoding_audio == 0:
-        message = "ðŸ˜´ *No hay usuarios realizando transcodificaciÃ³n en este momento.*"
+        message = "😴 *No hay usuarios realizando transcodificación en este momento.*"
     else:
         message = (f"*Transcodificando Video:* {total_transcoding_video} usuarios\n"
                    f"*Transcodificando Audio:* {total_transcoding_audio} usuarios\n\n") + message
     
-    keyboard = [[InlineKeyboardButton("ðŸ  Volver al MenÃº Principal", callback_data="main_menu")]]
+    keyboard = [[InlineKeyboardButton("🏠 Volver al Menú Principal", callback_data="main_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     edit_message_with_image(update, context, message, reply_markup)
 
@@ -545,7 +546,7 @@ def main() -> None:
 
     logger.info("Comenzando el polling")
     updater.start_polling()
-    logger.info("Bot iniciado y en ejecuciÃ³n")
+    logger.info("Bot iniciado y en ejecución")
     updater.idle()
 
 if __name__ == '__main__':
