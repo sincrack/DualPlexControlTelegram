@@ -15,6 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar los archivos del proyecto
 COPY bot.py config.py ./
+COPY html_generator.py ./
 
 # Copiar la imagen del bot
 COPY telegrambot.png ./
@@ -24,3 +25,4 @@ ENV PYTHONUNBUFFERED=1
 
 # Comando para ejecutar el bot
 CMD ["python", "-u", "bot.py"]
+

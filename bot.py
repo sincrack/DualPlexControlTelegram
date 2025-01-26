@@ -8,6 +8,8 @@ from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, Callback
 from plexapi.server import PlexServer
 from config import TELEGRAM_BOT_TOKEN, PLEX_SERVERS, GLANCES_SERVERS
 import os
+from html_generator import generate_streams_html
+import tempfile
 
 # Función de utilidad para escapar caracteres especiales de Markdown
 def escape_markdown(text):
@@ -85,7 +87,7 @@ def show_main_menu(update: Update, context: CallbackContext) -> None:
         return
     keyboard = [
         [InlineKeyboardButton("🖥️ Ver servidores", callback_data='view_servers')],
-        [InlineKeyboardButton("🎬 Streams actuales", callback_data='current_streams')],
+        [InlineKeyboardButton("📊 Informe Streams", callback_data='current_streams')],
         [InlineKeyboardButton("👥 Usuarios con múltiples streams", callback_data='multiple_streams')],
         [InlineKeyboardButton("🔄 Usuarios transcodificando", callback_data='transcoding_users')],
         [InlineKeyboardButton("🛠️ Modo Mantenimiento", callback_data='maintenance_mode')],
@@ -134,22 +136,27 @@ def button(update: Update, context: CallbackContext) -> None:
             show_main_menu(update, context)
         elif query.data == 'transcoding_users':
             show_transcoding_users(update, context)
+        elif query.data.startswith('confirm_stop_'):
+            parts = query.data.split('_')
+            server_index = int(parts[2])
+            session_key = '_'.join(parts[3:])
+            show_stream_details(update, context, server_index, session_key)
         elif query.data.startswith('stop_stream_'):
             parts = query.data.split('_')
-            if len(parts) >= 3:
-                server_index = int(parts[2])
-                session_key = '_'.join(parts[3:])  # Unir el resto en caso de que el session_key contenga guiones bajos
-                stop_user_stream(update, context, server_index, session_key)
-            else:
-                logger.error(f"Formato de callback_data incorrecto: {query.data}")
+            server_index = int(parts[2])
+            session_key = '_'.join(parts[3:])
+            stop_user_stream(update, context, server_index, session_key)
         elif query.data == 'maintenance_mode':
             show_maintenance_options(update, context)
         elif query.data == 'maintenance_1':
-            perform_maintenance(update, context, [0])
+            confirm_maintenance(update, context, [0])
         elif query.data == 'maintenance_2':
-            perform_maintenance(update, context, [1])
+            confirm_maintenance(update, context, [1])
         elif query.data == 'maintenance_all':
-            perform_maintenance(update, context, [0, 1])
+            confirm_maintenance(update, context, [0, 1])
+        elif query.data.startswith('confirm_maintenance_'):
+            server_indices = [int(i) for i in query.data.split('_')[2:]]
+            perform_maintenance(update, context, server_indices)
         elif query.data == 'multiple_streams':
             show_users_with_multiple_streams(update, context)
     except Exception as e:
@@ -249,59 +256,51 @@ def show_current_streams(update: Update, context: CallbackContext) -> None:
     if not is_authorized(update):
         return
     
-    total_users = 0
-    total_transcoding = 0
-    message = "🎬 *Streams actuales en todos los servidores:*\n\n"
+    streams_data = {}
     
     for server in PLEX_SERVERS:
         try:
             plex = PlexServer(server['url'], server['token'])
             sessions = plex.sessions()
             
-            server_users = len(sessions)
-            server_transcoding = 0
-            total_users += server_users
+            streams_data[server['name']] = {
+                'sessions': []
+            }
             
-            message += f"*Servidor {escape_markdown(server['name'])}* ({server_users} usuarios activos):\n"
-            if sessions:
-                for session in sessions:
-                    message += f"👤 *Usuario:* {escape_markdown(session.usernames[0])}\n"
-                    if session.type == 'episode':
-                        message += f"🎥 *Serie:* {escape_markdown(session.grandparentTitle)}\n"
-                        message += f"📺 *Episodio:* {escape_markdown(session.title)}\n"
-                    else:
-                        message += f"🎥 *Título:* {escape_markdown(session.title)}\n"
-                    if session.type == 'movie':
-                        session_type = 'Película'
-                    elif session.type == 'episode':
-                        session_type = 'Episodio'
-                    else:
-                        session_type = session.type.capitalize()
-                    message += f"📺 *Tipo:* {escape_markdown(session_type)}\n"
-                    message += f"⏳ *Progreso:* {session.viewOffset // 60000} minutos\n"
-
-                    # Verificar si se está realizando transcodificación
-                    if session.transcodeSessions:
-                        message += "🔄 *Transcodificando:* Sí\n"
-                        server_transcoding += 1
-                    else:
-                        message += "🔄 *Transcodificando:* No\n"
-                    message += f"🖥️ *Reproductor:* {escape_markdown(session.player.title)}\n"
-                    message += "\n"
-                
-                total_transcoding += server_transcoding
-            else:
-                message += "No hay reproducciones activas.\n\n"
+            for session in sessions:
+                session_data = {
+                    'username': session.usernames[0],
+                    'title': session.title if session.type != 'episode' else f"{session.grandparentTitle} - {session.title}",
+                    'type': 'Película' if session.type == 'movie' else 'Episodio' if session.type == 'episode' else session.type.capitalize(),
+                    'progress': session.viewOffset // 60000,
+                    'player': session.player.title,
+                    'transcoding': any(ts.videoDecision == 'transcode' or ts.audioDecision == 'transcode' for ts in session.transcodeSessions)
+                }
+                streams_data[server['name']]['sessions'].append(session_data)
         except Exception as e:
-            logger.error(f"Error al conectar con {escape_markdown(server['name'])}: {str(e)}")
-            message += f"Error al conectar con {escape_markdown(server['name'])}: {str(e)}\n\n"
+            logger.error(f"Error al conectar con {server['name']}: {str(e)}")
+            streams_data[server['name']] = {'error': str(e)}
     
-    message = (f"*Total de usuarios activos:* {total_users}\n"
-               f"*Usuarios realizando transcodificación:* {total_transcoding}\n\n") + message
+    html_content = generate_streams_html(streams_data)
     
+    # Crear un archivo temporal para guardar el HTML
+    with tempfile.NamedTemporaryFile(delete=False, mode='w', suffix='.html', encoding='utf-8') as temp_file:
+        temp_file.write(html_content)
+        temp_file_path = temp_file.name
+    
+    # Enviar el archivo HTML
+    with open(temp_file_path, 'rb') as file:
+        context.bot.send_document(chat_id=update.effective_chat.id, document=file, filename="streams_actuales.html")
+    
+    # Eliminar el archivo temporal
+    os.unlink(temp_file_path)
+    
+    # Enviar un mensaje corto
+    message = "Se ha generado un informe HTML con los streams actuales. Por favor, revisa el archivo adjunto para más detalles."
     keyboard = [[InlineKeyboardButton("🏠 Volver al Menú Principal", callback_data="main_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    edit_message_with_image(update, context, message, reply_markup)
+    context.bot.send_message(chat_id=update.effective_chat.id, text=message, reply_markup=reply_markup)
+
 
 def get_glances_data(url):
     try:
@@ -471,14 +470,15 @@ def show_help(update: Update, context: CallbackContext) -> None:
     help_text = (
         "🦸‍♂️ ¡Centro de Ayuda del Bot! 🦸‍♀️\n\n"
         "Aquí tienes una guía rápida de lo que puedo hacer:\n\n"
-        "🖥️ *Ver servidores:* Te muestra una lista de tus servidores Plex.\n"
+        "🖥️ *Ver servidores:* Muestra una lista de tus servidores Plex y permite acceder a opciones específicas de cada servidor.\n"
         "🔄 *Actualizar bibliotecas:* Actualiza todas las bibliotecas en un servidor específico.\n"
         "👀 *Ver reproducciones:* Muestra qué se está reproduciendo actualmente en un servidor.\n"
+        "📊 *Informe Streams:* Genera un informe detallado de todos los streams activos en tus servidores Plex.\n"
         "📊 *Estado del servidor:* Muestra información sobre el estado y la versión del servidor.\n"
         "📚 *Bibliotecas:* Muestra las bibliotecas del servidor.\n"
-        "🎬 *Streams actuales:* Muestra todos los streams activos en tus servidores Plex.\n"
         "🔄 *Usuarios transcodificando:* Muestra los usuarios que están realizando transcodificación.\n"
         "🛠️ *Modo Mantenimiento:* Permite realizar tareas de mantenimiento en los servidores.\n\n"
+        "👥 *Usuarios con múltiples streams:* Muestra información sobre usuarios que están reproduciendo contenido en más de un dispositivo.\n\n"
         "¡No dudes en contactar conmigo si tienes dudas @SinCracK ! 🎉"
     )
     keyboard = [[InlineKeyboardButton("🏠 Volver al Menú Principal", callback_data="main_menu")]]
@@ -490,7 +490,7 @@ def show_transcoding_users(update: Update, context: CallbackContext) -> None:
     if not is_authorized(update):
         return
     
-    message = "🔄 *Usuarios realizando transcodificación:*\n\n"
+    message = "🔄 *Usuarios realizando transcodificación de video:*\n\n"
     total_transcoding_video = 0
     total_transcoding_audio = 0
     keyboard = []
@@ -506,46 +506,57 @@ def show_transcoding_users(update: Update, context: CallbackContext) -> None:
             
             for session in sessions:
                 if session.transcodeSessions:
-                    transcode_type = []
+                    is_transcoding_video = False
+                    is_transcoding_audio = False
                     for transcode_session in session.transcodeSessions:
                         if transcode_session.videoDecision == 'transcode':
-                            transcode_type.append('Video')
-                            server_transcoding_video += 1
+                            is_transcoding_video = True
                         if transcode_session.audioDecision == 'transcode':
+                            is_transcoding_audio = True
+                    
+                    if is_transcoding_video:
+                        server_transcoding_video += 1
+                        server_message += f"👤 *Usuario:* {escape_markdown(session.usernames[0])}\n"
+                        if session.type == 'episode':
+                            server_message += f"🎥 *Serie:* {escape_markdown(session.grandparentTitle)}\n"
+                            server_message += f"📺 *Episodio:* {escape_markdown(session.title)}\n"
+                        else:
+                            server_message += f"🎥 *Título:* {escape_markdown(session.title)}\n"
+                        
+                        if session.type == 'movie':
+                            session_type = 'Película'
+                        elif session.type == 'episode':
+                            session_type = 'Episodio'
+                        else:
+                            session_type = session.type.capitalize()
+                        
+                        server_message += f"📺 *Tipo:* {escape_markdown(session_type)}\n"
+                        server_message += f"⏳ *Progreso:* {session.viewOffset // 60000} minutos\n"
+                        server_message += f"🖥️ *Reproductor:* {escape_markdown(session.player.title)}\n"
+                        
+                        transcode_type = []
+                        if is_transcoding_video:
+                            transcode_type.append('Video')
+                        if is_transcoding_audio:
                             transcode_type.append('Audio')
-                            server_transcoding_audio += 1
-                    
-                    server_message += f"👤 *Usuario:* {escape_markdown(session.usernames[0])}\n"
-                    if session.type == 'episode':
-                        server_message += f"🎥 *Serie:* {escape_markdown(session.grandparentTitle)}\n"
-                        server_message += f"📺 *Episodio:* {escape_markdown(session.title)}\n"
-                    else:
-                        server_message += f"🎥 *Título:* {escape_markdown(session.title)}\n"
-                    if session.type == 'movie':
-                        session_type = 'Película'
-                    elif session.type == 'episode':
-                        session_type = 'Episodio'
-                    else:
-                        session_type = session.type.capitalize()
-                    server_message += f"📺 *Tipo:* {escape_markdown(session_type)}\n"
-                    server_message += f"⏳ *Progreso:* {session.viewOffset // 60000} minutos\n"
-                    server_message += f"🖥️ *Reproductor:* {escape_markdown(session.player.title)}\n"
-                    
-                    if transcode_type:
+                        
                         server_message += f"🔄 *Transcodificando:* {' y '.join(transcode_type)}\n"
-                    else:
-                        server_message += "🔄 *Transcodificando:* Desconocido\n"
+                        
+                        # Modificar el botón para que llame a una nueva función
+                        keyboard.append([InlineKeyboardButton(f"❌ Detener reproducción de {session.usernames[0]}", 
+                                                              callback_data=f"confirm_stop_{server_index}_{session.sessionKey}")])
+                        
+                        server_message += "\n"  # Agregar una línea en blanco entre usuarios
                     
-                    # Añadir botón para detener la reproducción
-                    keyboard.append([InlineKeyboardButton(f"❌ Detener reproducción de {session.usernames[0]}", 
-                                                          callback_data=f"stop_stream_{server_index}_{session.sessionKey}")])
-                    
-                    server_message += "\n"  # Agregar una línea en blanco entre usuarios
+                    if is_transcoding_audio:
+                        server_transcoding_audio += 1
             
-            if server_transcoding_video > 0 or server_transcoding_audio > 0:
+            if server_transcoding_video > 0:
                 message += server_message
                 total_transcoding_video += server_transcoding_video
                 total_transcoding_audio += server_transcoding_audio
+            elif server_transcoding_audio > 0:
+                message += f"Servidor {escape_markdown(server['name'])}: Solo transcodificación de audio.\n\n"
             else:
                 message += f"Servidor {escape_markdown(server['name'])}: No hay usuarios transcodificando.\n\n"
         
@@ -553,11 +564,11 @@ def show_transcoding_users(update: Update, context: CallbackContext) -> None:
             logger.error(f"Error al conectar con {escape_markdown(server['name'])}: {str(e)}")
             message += f"Error al conectar con {escape_markdown(server['name'])}: {str(e)}\n\n"
     
-    if total_transcoding_video == 0 and total_transcoding_audio == 0:
-        message = "😴 *No hay usuarios realizando transcodificación en este momento.*"
-    else:
-        message = (f"*Transcodificando Video:* {total_transcoding_video} usuarios\n"
-                   f"*Transcodificando Audio:* {total_transcoding_audio} usuarios\n\n") + message
+    if total_transcoding_video == 0:
+        message = "😴 *No hay usuarios realizando transcodificación de video en este momento.*"
+    
+    message = (f"*Transcodificando Video:* {total_transcoding_video} usuarios\n"
+               f"*Transcodificando Audio:* {total_transcoding_audio} usuarios\n\n") + message
     
     keyboard.append([InlineKeyboardButton("🏠 Volver al Menú Principal", callback_data="main_menu")])
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -582,9 +593,9 @@ def stop_user_stream(update: Update, context: CallbackContext, server_index: int
             message += "Se le ha enviado un mensaje para que revise su configuración."
         else:
             logger.warning(f"No se encontró la sesión con clave {session_key}")
-            active_sessions = "\n".join([f"- {s.sessionKey}: {s.title} ({s.usernames[0]})" for s in sessions])
+            active_sessions ="\n".join([f"- {s.sessionKey}: {s.title} ({s.usernames[0]})" for s in sessions])
             logger.info(f"Sesiones activas:\n{active_sessions}")
-            message = f"❌ No se encontró la sesión especificada (clave: {session_key}).\n"
+            message = f"❌ No se encontró la sesión especificada (clave{session_key}).\n"
             message += "Es posible que la reproducción ya haya terminado."
     except Exception as e:
         logger.error(f"Error al detener la reproducción: {str(e)}")
@@ -606,6 +617,24 @@ def show_maintenance_options(update: Update, context: CallbackContext) -> None:
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     edit_message_with_image(update, context, "Selecciona una opción de mantenimiento:", reply_markup)
+
+def confirm_maintenance(update: Update, context: CallbackContext, server_indices: List[int]) -> None:
+    logger.info(f"Solicitando confirmación para mantenimiento en servidores: {server_indices}")
+    if not is_authorized(update):
+        return
+    
+    if len(server_indices) == 1:
+        server_name = PLEX_SERVERS[server_indices[0]]['name']
+        message = f"¿Estás seguro de que quieres realizar mantenimiento en {server_name}?\n\nEsto detendrá todas las reproducciones actuales."
+    else:
+        message = "¿Estás seguro de que quieres realizar mantenimiento general?\n\nEsto detendrá todas las reproducciones en todos los servidores."
+    
+    keyboard = [
+        [InlineKeyboardButton("✅ Sí, realizar mantenimiento", callback_data=f"confirm_maintenance_{'_'.join(map(str, server_indices))}")],
+        [InlineKeyboardButton("❌ No, cancelar", callback_data="maintenance_mode")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    edit_message_with_image(update, context, message, reply_markup)
 
 def perform_maintenance(update: Update, context: CallbackContext, server_indices: List[int]) -> None:
     logger.info(f"Realizando mantenimiento en servidores: {server_indices}")
@@ -699,6 +728,75 @@ def show_users_with_multiple_streams(update: Update, context: CallbackContext) -
     keyboard = [[InlineKeyboardButton("🏠 Volver al Menú Principal", callback_data="main_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     edit_message_with_image(update, context, message, reply_markup)
+
+def show_stream_details(update: Update, context: CallbackContext, server_index: int, session_key: str) -> None:
+    logger.info(f"Mostrando detalles del stream para confirmación: servidor {server_index}, sesión {session_key}")
+    if not is_authorized(update):
+        return
+    
+    try:
+        server = PLEX_SERVERS[server_index]
+        plex = PlexServer(server['url'], server['token'])
+        sessions = plex.sessions()
+        
+        session = next((s for s in sessions if str(s.sessionKey) == str(session_key)), None)
+        if session:
+            message = f"🎬 *Detalles del stream:*\n\n"
+            message += f"👤 *Usuario:* {escape_markdown(session.usernames[0])}\n"
+            message += f"🎥 *Título:* {escape_markdown(session.title)}\n"
+            message += f"📺 *Tipo:* {'Película' if session.type == 'movie' else 'Episodio' if session.type == 'episode' else session.type.capitalize()}\n"
+            message += f"⏳ *Progreso:* {session.viewOffset // 60000} minutos\n"
+            message += f"🖥️ *Reproductor:* {escape_markdown(session.player.title)}\n\n"
+            
+            # Añadir información detallada sobre la transcodificación
+            if session.transcodeSessions:
+                message += "*Detalles de Transcodificación:*\n"
+                for transcode in session.transcodeSessions:
+                    message += f"🔄 *Tipo de Transcode:* "
+                    transcode_types = []
+                    if transcode.videoDecision == 'transcode':
+                        transcode_types.append("Video")
+                    if transcode.audioDecision == 'transcode':
+                        transcode_types.append("Audio")
+                    message += f"{' y '.join(transcode_types)}\n"
+                    
+                    if transcode.videoDecision == 'transcode':
+                        message += f"🎞️ *Formato de Video Original:* {getattr(transcode, 'sourceVideoCodec', 'No disponible')}\n"
+                        message += f"🎞️ *Formato de Video Transcode:* {getattr(transcode, 'videoCodec', 'No disponible')}\n"
+                        if hasattr(transcode, 'sourceVideoResolution'):
+                            message += f"📊 *Resolución Original:* {transcode.sourceVideoResolution}\n"
+                        if hasattr(transcode, 'videoResolution'):
+                            message += f"📊 *Resolución Transcode:* {transcode.videoResolution}\n"
+                    
+                    if transcode.audioDecision == 'transcode':
+                        message += f"🔊 *Formato de Audio Original:* {getattr(transcode, 'sourceAudioCodec', 'No disponible')}\n"
+                        message += f"🔊 *Formato de Audio Transcode:* {getattr(transcode, 'audioCodec', 'No disponible')}\n"
+                        message += f"🔉 *Canales de Audio Original:* {getattr(transcode, 'sourceAudioChannels', 'No disponible')}\n"
+                        message += f"🔉 *Canales de Audio Transcode:* {getattr(transcode, 'audioChannels', 'No disponible')}\n"
+                    
+                    message += f"⚙️ *Razón del Transcode:* {getattr(transcode, 'transcodeReason', 'No disponible')}\n\n"
+            else:
+                message += "*No se está realizando transcodificación para este stream.*\n\n"
+            
+            message += "¿Estás seguro de que quieres detener este stream?"
+            
+            keyboard = [
+                [InlineKeyboardButton("✅ Sí, detener", callback_data=f"stop_stream_{server_index}_{session_key}")],
+                [InlineKeyboardButton("❌ No, cancelar", callback_data="transcoding_users")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            edit_message_with_image(update, context, message, reply_markup)
+        else:
+            message = "❌ No se encontró la sesión especificada. Es posible que la reproducción ya haya terminado."
+            keyboard = [[InlineKeyboardButton("🔙 Volver a usuarios transcodificando", callback_data="transcoding_users")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            edit_message_with_image(update, context, message, reply_markup)
+    except Exception as e:
+        logger.error(f"Error al mostrar detalles del stream: {str(e)}")
+        message = f"❌ Error al obtener detalles del stream: {str(e)}"
+        keyboard = [[InlineKeyboardButton("🔙 Volver a usuarios transcodificando", callback_data="transcoding_users")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        edit_message_with_image(update, context, message, reply_markup)
 
 def main() -> None:
     logger.info("Iniciando el bot")
